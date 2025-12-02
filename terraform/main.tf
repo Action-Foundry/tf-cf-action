@@ -63,10 +63,13 @@ resource "cloudflare_page_rule" "page_rules" {
   status   = each.value.status
 
   actions {
-    # Common page rule actions
-    forwarding_url {
-      url         = lookup(each.value.actions, "forwarding_url", null)
-      status_code = lookup(each.value.actions, "forwarding_status_code", 301)
+    # Forwarding URL action (conditional)
+    dynamic "forwarding_url" {
+      for_each = lookup(each.value.actions, "forwarding_url", null) != null ? [1] : []
+      content {
+        url         = lookup(each.value.actions, "forwarding_url", null)
+        status_code = lookup(each.value.actions, "forwarding_status_code", 301)
+      }
     }
 
     cache_level              = lookup(each.value.actions, "cache_level", null)
@@ -77,10 +80,19 @@ resource "cloudflare_page_rule" "page_rules" {
     ssl                      = lookup(each.value.actions, "ssl", null)
     security_level           = lookup(each.value.actions, "security_level", null)
     rocket_loader            = lookup(each.value.actions, "rocket_loader", null)
-    minify {
-      html = lookup(each.value.actions, "minify_html", "off")
-      css  = lookup(each.value.actions, "minify_css", "off")
-      js   = lookup(each.value.actions, "minify_js", "off")
+
+    # Minify action (conditional)
+    dynamic "minify" {
+      for_each = (
+        lookup(each.value.actions, "minify_html", null) != null ||
+        lookup(each.value.actions, "minify_css", null) != null ||
+        lookup(each.value.actions, "minify_js", null) != null
+      ) ? [1] : []
+      content {
+        html = lookup(each.value.actions, "minify_html", "off")
+        css  = lookup(each.value.actions, "minify_css", "off")
+        js   = lookup(each.value.actions, "minify_js", "off")
+      }
     }
   }
 }

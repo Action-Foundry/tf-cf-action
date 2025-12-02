@@ -187,12 +187,27 @@ detect_drift() {
     
     log_step "Detecting Configuration Drift"
     
-    local refresh_output
-    if ! refresh_output=$(terraform refresh ${TFVARS_ARGS:-} 2>&1); then
-        log_warning "Could not refresh state for drift detection"
-        echo "$refresh_output"
-        return 0
+    local plan_args=("-input=false" "-refresh-only" "-detailed-exitcode")
+    
+    if [[ -n "${TFVARS_ARGS:-}" ]]; then
+        # shellcheck disable=SC2206
+        plan_args+=($TFVARS_ARGS)
     fi
+    
+    local drift_exit_code=0
+    terraform plan "${plan_args[@]}" 2>&1 || drift_exit_code=$?
+    
+    case $drift_exit_code in
+        0)
+            log_success "No drift detected - state is in sync"
+            ;;
+        1)
+            log_warning "Error during drift detection"
+            ;;
+        2)
+            log_warning "Drift detected - configuration differs from remote state"
+            ;;
+    esac
     
     log_success "Drift detection completed"
 }
@@ -212,10 +227,11 @@ analyze_plan() {
     
     # Parse changes using jq if available
     if command -v jq &> /dev/null; then
-        local create_count update_count delete_count
+        local create_count update_count delete_count total_changes
         create_count=$(echo "$plan_output" | jq '[.resource_changes[]? | select(.change.actions[] == "create")] | length')
         update_count=$(echo "$plan_output" | jq '[.resource_changes[]? | select(.change.actions[] == "update")] | length')
         delete_count=$(echo "$plan_output" | jq '[.resource_changes[]? | select(.change.actions[] == "delete")] | length')
+        total_changes=$((create_count + update_count + delete_count))
         
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -227,9 +243,14 @@ analyze_plan() {
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""
         
-        # Set GitHub Action outputs
+        # Set GitHub Action outputs - check if there are actual changes
+        local has_changes="false"
+        if [[ "$total_changes" -gt 0 ]]; then
+            has_changes="true"
+        fi
+        
         {
-            echo "plan_has_changes=true"
+            echo "plan_has_changes=$has_changes"
             echo "plan_summary=Create: $create_count, Update: $update_count, Delete: $delete_count"
         } >> "$GITHUB_OUTPUT"
         
