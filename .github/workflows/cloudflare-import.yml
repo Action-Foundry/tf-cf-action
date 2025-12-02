@@ -1,0 +1,71 @@
+name: Import Existing Cloudflare Resources
+# This workflow helps onboard existing Cloudflare-managed domains
+# into Terraform state management
+
+on:
+  workflow_dispatch:
+    inputs:
+      import_resources:
+        description: 'Resources to import (format: resource.name=cloudflare_id, one per line)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Perform a dry run (plan only, no import)'
+        required: false
+        default: 'true'
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  TF_LOG: INFO
+  TF_INPUT: false
+
+jobs:
+  import-resources:
+    name: Import Cloudflare Resources
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate Import Request
+        run: |
+          echo "## Import Request Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Resources to Import:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ github.event.inputs.import_resources }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Dry Run: ${{ github.event.inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Import Resources
+        if: github.event.inputs.dry_run == 'false'
+        uses: Action-Foundry/tf-cf-action@main
+        with:
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          working_directory: './terraform'
+          terraform_action: 'import'
+          import_resources: ${{ github.event.inputs.import_resources }}
+          auto_approve: 'false'
+
+      - name: Dry Run - Plan Only
+        if: github.event.inputs.dry_run == 'true'
+        uses: Action-Foundry/tf-cf-action@main
+        with:
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          working_directory: './terraform'
+          terraform_action: 'plan'
+          enable_drift_detection: 'true'
+
+      - name: Post Import Summary
+        if: always() && github.event.inputs.dry_run == 'false'
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Import Results" >> $GITHUB_STEP_SUMMARY
+          echo "Import operation completed. Review the Terraform state." >> $GITHUB_STEP_SUMMARY
