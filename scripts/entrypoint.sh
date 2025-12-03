@@ -177,14 +177,19 @@ setup_tfvars() {
     
     # Handle inline tfvars
     if [[ -n "${INPUT_TFVARS:-}" ]]; then
-        # Create a temporary tfvars file from inline variables
-        local -r temp_tfvars="/tmp/inline.auto.tfvars"
-        if ! echo "${INPUT_TFVARS}" > "$temp_tfvars"; then
+        # Create a secure temporary tfvars file from inline variables
+        local temp_tfvars
+        temp_tfvars=$(mktemp /tmp/inline.XXXXXX.auto.tfvars) || {
             log_error "Failed to create temporary tfvars file"
+            exit 1
+        }
+        if ! echo "${INPUT_TFVARS}" > "$temp_tfvars"; then
+            log_error "Failed to write to temporary tfvars file"
+            rm -f "$temp_tfvars"
             exit 1
         fi
         tfvars_args+=("-var-file=$temp_tfvars")
-        log_info "Created inline tfvars file"
+        log_info "Created inline tfvars file: $temp_tfvars"
     fi
     
     # Export for use in other functions
@@ -362,9 +367,9 @@ import_resources() {
         fi
         
         # Validate format: must have exactly one equals sign
-        # Check for absence of equals sign or multiple equals signs
-        local equals_count
-        equals_count=$(grep -o "=" <<< "$line" | wc -l)
+        # Count equals signs using bash string manipulation
+        local temp="${line//[^=]}"
+        local equals_count="${#temp}"
         if [[ "$equals_count" -ne 1 ]]; then
             log_warning "Skipping malformed import line: $line"
             log_warning "Expected format: resource_address=cloudflare_id (exactly one '=' character)"
