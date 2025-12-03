@@ -1,38 +1,93 @@
-# Terraform files
+# Terraform State Files
+# These should never be committed as they may contain sensitive data
 *.tfstate
 *.tfstate.*
-*.tfplan
+*.tfstate.backup
 .terraform/
 .terraform.lock.hcl
+
+# Terraform Plan Files
+*.tfplan
+tfplan*
+
+# Terraform Crash Logs
 crash.log
 crash.*.log
+
+# Terraform Variable Files with Secrets
+# Note: .tfvars files in examples/ are intentionally tracked
 *.tfvars.json
+*.auto.tfvars
+terraform.tfvars
+
+# Terraform Override Files
 override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
 
-# IDE and editor files
+# IDE and Editor Files
 .idea/
 .vscode/
 *.swp
 *.swo
+*.swn
 *~
-.DS_Store
+.project
+.classpath
+.settings/
 
-# Temporary files
+# OS-Specific Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary Files
 /tmp/
 *.tmp
 *.temp
+*.bak
 
-# Environment files
+# Environment and Secret Files
 .env
 .env.local
 .env.*.local
+*.key
+*.pem
+*.p12
 
-# Logs
+# Log Files
 *.log
+logs/
 
-# OS files
-Thumbs.db
-.DS_Store
+# Backup Files
+*.backup
+*.old
+
+# Test and Coverage Files
+coverage/
+.coverage
+htmlcov/
+
+# Node.js (if used for tooling)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python (if used for tooling)
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
