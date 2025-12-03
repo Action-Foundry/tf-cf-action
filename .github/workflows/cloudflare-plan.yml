@@ -1,0 +1,64 @@
+name: Cloudflare Infrastructure Plan
+# This workflow creates a Terraform plan on pull requests
+# It provides a preview of changes without applying them
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+      - '.github/workflows/cloudflare-plan.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  TF_LOG: INFO
+  TF_INPUT: false
+
+jobs:
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Cloudflare Plan
+        id: plan
+        uses: Action-Foundry/tf-cf-action@v1.0.0
+        with:
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          working_directory: './terraform'
+          terraform_action: 'plan'
+          tfvars_file: 'terraform.tfvars'
+          enable_drift_detection: 'true'
+
+      - name: Comment Plan on PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        env:
+          PLAN: "${{ steps.plan.outputs.plan_output }}"
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const output = `#### Terraform Plan 📖
+            
+            <details><summary>Show Plan</summary>
+            
+            \`\`\`terraform
+            ${process.env.PLAN}
+            \`\`\`
+            
+            </details>
+            
+            *Pushed by: @${{ github.actor }}, Action: \`${{ github.event_name }}\`*`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })

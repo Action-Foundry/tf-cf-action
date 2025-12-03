@@ -1,0 +1,103 @@
+name: 'Terraform Cloudflare Action'
+description: 'A GitHub Action for Cloudflare CI/CD with Terraform, featuring SMART, DRY, and safety best practices'
+author: 'Action-Foundry'
+branding:
+  icon: 'cloud'
+  color: 'orange'
+
+inputs:
+  cloudflare_api_token:
+    description: 'Cloudflare API token with appropriate permissions'
+    required: true
+  cloudflare_account_id:
+    description: 'Cloudflare Account ID'
+    required: true
+  terraform_version:
+    description: 'Terraform version to use'
+    required: false
+    default: '1.6.0'
+  working_directory:
+    description: 'Working directory containing Terraform configuration'
+    required: false
+    default: '.'
+  terraform_action:
+    description: 'Terraform action to perform: plan, apply, destroy, import, or validate'
+    required: false
+    default: 'plan'
+  auto_approve:
+    description: 'Skip interactive approval for apply/destroy (use with caution)'
+    required: false
+    default: 'false'
+  tfvars_file:
+    description: 'Path to a terraform.tfvars file'
+    required: false
+    default: ''
+  tfvars:
+    description: 'Terraform variables in HCL format (key = value)'
+    required: false
+    default: ''
+  backend_config:
+    description: 'Terraform backend configuration (key=value pairs, newline separated)'
+    required: false
+    default: ''
+  import_resources:
+    description: 'Resources to import in format: resource_type.name=cloudflare_id (newline separated)'
+    required: false
+    default: ''
+  plan_output_file:
+    description: 'Path to save the plan output for later apply'
+    required: false
+    default: 'tfplan'
+  enable_drift_detection:
+    description: 'Enable drift detection before apply'
+    required: false
+    default: 'true'
+  destroy_protection:
+    description: 'Require explicit confirmation for destroy operations'
+    required: false
+    default: 'true'
+  max_parallelism:
+    description: 'Maximum number of concurrent operations'
+    required: false
+    default: '10'
+
+outputs:
+  plan_output:
+    description: 'Terraform plan output'
+  plan_has_changes:
+    description: 'Whether the plan has changes (true/false)'
+  plan_summary:
+    description: 'Summary of planned changes'
+  apply_output:
+    description: 'Terraform apply output'
+  state_outputs:
+    description: 'Terraform state outputs as JSON'
+  imported_resources:
+    description: 'List of successfully imported resources'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+        terraform_wrapper: false
+
+    - name: Run Terraform Cloudflare Action
+      shell: bash
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare_api_token }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working_directory }}
+        INPUT_TERRAFORM_ACTION: ${{ inputs.terraform_action }}
+        INPUT_AUTO_APPROVE: ${{ inputs.auto_approve }}
+        INPUT_TFVARS_FILE: ${{ inputs.tfvars_file }}
+        INPUT_TFVARS: ${{ inputs.tfvars }}
+        INPUT_BACKEND_CONFIG: ${{ inputs.backend_config }}
+        INPUT_IMPORT_RESOURCES: ${{ inputs.import_resources }}
+        INPUT_PLAN_OUTPUT_FILE: ${{ inputs.plan_output_file }}
+        INPUT_ENABLE_DRIFT_DETECTION: ${{ inputs.enable_drift_detection }}
+        INPUT_DESTROY_PROTECTION: ${{ inputs.destroy_protection }}
+        INPUT_MAX_PARALLELISM: ${{ inputs.max_parallelism }}
+      run: ${{ github.action_path }}/scripts/entrypoint.sh

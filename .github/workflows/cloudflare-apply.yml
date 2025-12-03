@@ -1,0 +1,68 @@
+name: Cloudflare Infrastructure Apply
+# This workflow applies Terraform changes after merge to main
+# It includes safety mechanisms and requires explicit approval
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'terraform/**'
+  workflow_dispatch:
+    inputs:
+      auto_approve:
+        description: 'Auto-approve the apply (use with caution)'
+        required: false
+        default: 'false'
+        type: boolean
+      terraform_action:
+        description: 'Terraform action to perform'
+        required: false
+        default: 'apply'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_LOG: INFO
+  TF_INPUT: false
+
+jobs:
+  terraform-apply:
+    name: Terraform Apply
+    runs-on: ubuntu-latest
+    environment: production  # Requires manual approval if configured
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Terraform Cloudflare Apply
+        uses: Action-Foundry/tf-cf-action@v1.0.0
+        with:
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          working_directory: './terraform'
+          terraform_action: ${{ github.event.inputs.terraform_action || 'apply' }}
+          auto_approve: ${{ github.event.inputs.auto_approve || 'false' }}
+          tfvars_file: 'terraform.tfvars'
+          enable_drift_detection: 'true'
+          destroy_protection: 'true'
+
+      - name: Post Apply Summary
+        if: always()
+        run: |
+          echo "## Terraform Apply Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Action | ${{ github.event.inputs.terraform_action || 'apply' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | production |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered by | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
