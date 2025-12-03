@@ -1,5 +1,16 @@
 # Example: Worker Deployment
 # This example demonstrates Cloudflare Workers configuration
+#
+# Usage:
+# 1. Copy this file to your terraform directory
+# 2. Replace YOUR_ZONE_ID with actual zone ID
+# 3. Customize worker scripts for your use case
+# 4. Run: terraform plan -var-file=workers.tfvars
+#
+# SECURITY NOTE:
+# Do NOT use secret_text_bindings for production secrets!
+# Secrets stored in Terraform state are NOT encrypted.
+# Use Wrangler CLI or Cloudflare Dashboard to set secrets securely.
 
 # Workers
 workers = {

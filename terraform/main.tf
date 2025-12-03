@@ -14,6 +14,11 @@ resource "cloudflare_zone" "zones" {
   paused     = each.value.paused
   jump_start = each.value.jump_start
   type       = each.value.type
+  
+  # Lifecycle to prevent accidental deletion of zones
+  lifecycle {
+    prevent_destroy = false  # Set to true in production to prevent accidental zone deletion
+  }
 }
 
 #==============================================================================
@@ -29,10 +34,13 @@ resource "cloudflare_record" "dns_records" {
   content  = each.value.content
   priority = each.value.priority
   proxied  = each.value.proxied
-  ttl      = each.value.ttl
-  comment  = each.value.comment
-  tags     = each.value.tags
+  # Cloudflare automatically manages TTL for proxied records, so we set it to 1 (automatic)
+  # For non-proxied records, use the specified TTL value
+  ttl     = each.value.proxied ? 1 : each.value.ttl
+  comment = each.value.comment
+  tags    = each.value.tags
 
+  # Dynamic block for SRV, CAA, and other records requiring structured data
   dynamic "data" {
     for_each = each.value.data != null ? [each.value.data] : []
     content {
@@ -61,6 +69,7 @@ resource "cloudflare_page_rule" "page_rules" {
 
   actions {
     # Forwarding URL action (conditional)
+    # Used for redirects (301/302)
     dynamic "forwarding_url" {
       for_each = lookup(each.value.actions, "forwarding_url", null) != null ? [1] : []
       content {
@@ -69,6 +78,7 @@ resource "cloudflare_page_rule" "page_rules" {
       }
     }
 
+    # Cache and performance settings
     cache_level              = lookup(each.value.actions, "cache_level", null)
     browser_cache_ttl        = lookup(each.value.actions, "browser_cache_ttl", null)
     edge_cache_ttl           = lookup(each.value.actions, "edge_cache_ttl", null)
@@ -79,6 +89,7 @@ resource "cloudflare_page_rule" "page_rules" {
     rocket_loader            = lookup(each.value.actions, "rocket_loader", null)
 
     # Minify action (conditional)
+    # Reduces file sizes for HTML, CSS, and JavaScript
     dynamic "minify" {
       for_each = (
         lookup(each.value.actions, "minify_html", null) != null ||
@@ -175,9 +186,13 @@ resource "cloudflare_workers_script" "workers" {
     }
   }
 
-  # WARNING: Do not set secrets via Terraform to avoid writing them to state.
-  # Use `wrangler secret put` or the Cloudflare dashboard/API to set secrets for Workers.
-  # See: https://developers.cloudflare.com/workers/configuration/secrets/
+  # SECURITY WARNING: secret_text_binding stores secrets in Terraform state in plain text!
+  # This is NOT recommended for production use.
+  # Instead, use one of these secure alternatives:
+  # 1. Wrangler CLI: `wrangler secret put SECRET_NAME`
+  # 2. Cloudflare Dashboard: Workers & Pages > Your Worker > Settings > Variables
+  # 3. Cloudflare API: https://developers.cloudflare.com/workers/configuration/secrets/
+  # Only use this for development/testing with non-sensitive dummy values.
   dynamic "secret_text_binding" {
     for_each = each.value.secret_text_bindings
     content {

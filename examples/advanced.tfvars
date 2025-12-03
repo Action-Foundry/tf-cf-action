@@ -1,5 +1,17 @@
 # Example: Advanced Configuration with Page Rules and Firewall
 # This example shows security-focused configuration
+#
+# Usage:
+# 1. Copy this file to your terraform directory
+# 2. Replace YOUR_ZONE_ID with actual zone ID
+# 3. Customize security rules based on your requirements
+# 4. Run: terraform plan -var-file=advanced.tfvars
+#
+# Security Best Practices:
+# - Always use SSL/TLS strict mode or higher
+# - Enable automatic HTTPS rewrites
+# - Implement rate limiting and bot protection
+# - Use firewall rules to block malicious traffic
 
 # SSL/TLS Settings
 ssl_settings = {

@@ -25,6 +25,12 @@ on:
           - apply
           - destroy
 
+# Prevent concurrent execution to avoid state conflicts
+# Do not cancel in progress for apply operations
+concurrency:
+  group: terraform-apply
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write
@@ -44,7 +50,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Terraform Cloudflare Apply
-        uses: Action-Foundry/tf-cf-action@v1.0.0
+        uses: Action-Foundry/tf-cf-action@main  # Use @main or specific version tag
         with:
           cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -9,12 +9,22 @@ variable "cloudflare_api_token" {
   description = "Cloudflare API Token with appropriate permissions"
   type        = string
   sensitive   = true
+  
+  validation {
+    condition     = length(var.cloudflare_api_token) > 0
+    error_message = "The API token must not be empty."
+  }
 }
 
 variable "cloudflare_account_id" {
   description = "Cloudflare Account ID"
   type        = string
   sensitive   = true
+  
+  validation {
+    condition     = length(var.cloudflare_account_id) > 0
+    error_message = "The account ID must not be empty."
+  }
 }
 
 #==============================================================================

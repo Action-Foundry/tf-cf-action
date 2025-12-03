@@ -7,7 +7,6 @@ set -euo pipefail
 #==============================================================================
 # CONFIGURATION AND CONSTANTS
 #==============================================================================
-readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly LOG_PREFIX="[TF-CF-ACTION]"
 readonly PLAN_FILE="${INPUT_PLAN_OUTPUT_FILE:-tfplan}"
 
@@ -55,10 +54,14 @@ write_github_output() {
 }
 
 # Add arguments from string to array safely (avoids shellcheck SC2206)
+# Args:
+#   $1: Name of the array variable to append to (passed by reference)
+#   $2: String containing space-separated arguments
 add_args_from_string() {
     local -n arr=$1
     local str=$2
     if [[ -n "$str" ]]; then
+        local args_array
         IFS=' ' read -ra args_array <<< "$str"
         arr+=("${args_array[@]}")
     fi
@@ -67,6 +70,8 @@ add_args_from_string() {
 #==============================================================================
 # VALIDATION FUNCTIONS
 #==============================================================================
+# Validates that all required input parameters are provided
+# Exits with code 1 if any required inputs are missing
 validate_required_inputs() {
     log_step "Validating Required Inputs"
     
@@ -82,15 +87,19 @@ validate_required_inputs() {
     
     if [[ ${#missing_inputs[@]} -gt 0 ]]; then
         log_error "Missing required inputs: ${missing_inputs[*]}"
+        log_error "Please ensure these inputs are set in your workflow configuration"
         exit 1
     fi
     
     log_success "All required inputs validated"
 }
 
+# Validates that the specified Terraform action is supported
+# Args: None (uses INPUT_TERRAFORM_ACTION environment variable)
+# Exits with code 1 if the action is not valid
 validate_action() {
     local action="${INPUT_TERRAFORM_ACTION:-plan}"
-    local valid_actions=("plan" "apply" "destroy" "import" "validate" "output" "init")
+    local -r valid_actions=("plan" "apply" "destroy" "import" "validate" "output" "init")
     
     local is_valid=false
     for valid in "${valid_actions[@]}"; do
@@ -101,7 +110,7 @@ validate_action() {
     done
     
     if [[ "$is_valid" == "false" ]]; then
-        log_error "Invalid terraform action: $action"
+        log_error "Invalid terraform action: '$action'"
         log_error "Valid actions are: ${valid_actions[*]}"
         exit 1
     fi
@@ -109,21 +118,34 @@ validate_action() {
     log_info "Terraform action: $action"
 }
 
+# Validates and changes to the working directory
+# Args: None (uses INPUT_WORKING_DIRECTORY environment variable)
+# Exits with code 1 if the directory doesn't exist or can't be accessed
 validate_working_directory() {
     local working_dir="${INPUT_WORKING_DIRECTORY:-.}"
     
     if [[ ! -d "$working_dir" ]]; then
         log_error "Working directory does not exist: $working_dir"
+        log_error "Please ensure the path is correct and the directory exists"
         exit 1
     fi
     
-    cd "$working_dir"
+    if ! cd "$working_dir" 2>/dev/null; then
+        log_error "Unable to access working directory: $working_dir"
+        exit 1
+    fi
+    
     log_info "Working directory: $(pwd)"
 }
 
 #==============================================================================
 # TERRAFORM HELPER FUNCTIONS (DRY Principle)
 #==============================================================================
+# Executes a Terraform command with the specified arguments
+# Args:
+#   $1: Terraform command (e.g., "init", "plan", "apply")
+#   $@: Additional arguments to pass to the command
+# Returns: Exit code from Terraform command
 run_terraform() {
     local cmd="$1"
     shift
@@ -133,6 +155,9 @@ run_terraform() {
     terraform "$cmd" "${args[@]:-}" 2>&1
 }
 
+# Configures Terraform variables from file or inline input
+# Supports both external tfvars files and inline variable definitions
+# Exports TFVARS_ARGS for use in subsequent Terraform commands
 setup_tfvars() {
     log_step "Setting up Terraform Variables"
     
@@ -145,17 +170,26 @@ setup_tfvars() {
             log_info "Using tfvars file: ${INPUT_TFVARS_FILE}"
         else
             log_error "Specified tfvars file not found: ${INPUT_TFVARS_FILE}"
+            log_error "Please verify the file path is correct"
             exit 1
         fi
     fi
     
     # Handle inline tfvars
     if [[ -n "${INPUT_TFVARS:-}" ]]; then
-        # Create a temporary tfvars file from inline variables
-        local temp_tfvars="/tmp/inline.auto.tfvars"
-        echo "${INPUT_TFVARS}" > "$temp_tfvars"
+        # Create a secure temporary tfvars file from inline variables
+        local temp_tfvars
+        temp_tfvars=$(mktemp /tmp/inline.XXXXXX.auto.tfvars) || {
+            log_error "Failed to create temporary tfvars file"
+            exit 1
+        }
+        if ! echo "${INPUT_TFVARS}" > "$temp_tfvars"; then
+            log_error "Failed to write to temporary tfvars file"
+            rm -f "$temp_tfvars"
+            exit 1
+        fi
         tfvars_args+=("-var-file=$temp_tfvars")
-        log_info "Created inline tfvars file"
+        log_info "Created inline tfvars file: $temp_tfvars"
     fi
     
     # Export for use in other functions
@@ -163,6 +197,8 @@ setup_tfvars() {
     log_success "Terraform variables configured"
 }
 
+# Configures Terraform backend settings from newline-separated key=value pairs
+# Exports BACKEND_CONFIG_ARGS for use in terraform init command
 setup_backend_config() {
     if [[ -z "${INPUT_BACKEND_CONFIG:-}" ]]; then
         return 0
@@ -172,9 +208,16 @@ setup_backend_config() {
     
     local backend_args=()
     while IFS= read -r line; do
-        if [[ -n "$line" ]]; then
+        # Skip empty lines and comments
+        if [[ -n "$line" ]] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
             backend_args+=("-backend-config=$line")
-            log_info "Backend config: $line"
+            # Mask potential sensitive values in logs (case-insensitive matching)
+            local display_line="$line"
+            local line_lower="${line,,}"  # Convert to lowercase for comparison
+            if [[ "$line_lower" =~ (password|secret|token|key|credentials)= ]]; then
+                display_line="${line%%=*}=***"
+            fi
+            log_info "Backend config: $display_line"
         fi
     done <<< "${INPUT_BACKEND_CONFIG}"
     
@@ -185,6 +228,8 @@ setup_backend_config() {
 #==============================================================================
 # SAFETY MECHANISMS
 #==============================================================================
+# Enforces destroy protection to prevent accidental resource destruction
+# Requires both auto_approve=true and destroy_protection=false for destroy operations
 check_destroy_protection() {
     local action="${INPUT_TERRAFORM_ACTION:-plan}"
     
@@ -201,6 +246,8 @@ check_destroy_protection() {
     fi
 }
 
+# Detects configuration drift between Terraform state and actual infrastructure
+# Uses refresh-only plan to identify any discrepancies without making changes
 detect_drift() {
     if [[ "${INPUT_ENABLE_DRIFT_DETECTION:-true}" != "true" ]]; then
         return 0
@@ -221,34 +268,49 @@ detect_drift() {
             ;;
         1)
             log_warning "Error during drift detection"
+            log_warning "This may indicate a problem with the Terraform configuration or state"
             ;;
         2)
             log_warning "Drift detected - configuration differs from remote state"
+            log_warning "Review the output above to see what has changed outside of Terraform"
+            ;;
+        *)
+            log_warning "Unexpected exit code from drift detection: $drift_exit_code"
             ;;
     esac
     
     log_success "Drift detection completed"
 }
 
+# Analyzes and summarizes a Terraform plan file
+# Provides detailed counts of resources to create, update, and delete
+# Args:
+#   $1: Path to the Terraform plan file
 analyze_plan() {
     local plan_file="$1"
-    local plan_output
+    
+    if [[ ! -f "$plan_file" ]]; then
+        log_warning "Plan file not found: $plan_file"
+        return 0
+    fi
     
     log_step "Analyzing Terraform Plan"
     
+    local plan_output
     plan_output=$(terraform show -json "$plan_file" 2>/dev/null || true)
     
     if [[ -z "$plan_output" ]]; then
         log_warning "Could not analyze plan output"
+        log_warning "The plan file may be invalid or Terraform may not be configured correctly"
         return 0
     fi
     
     # Parse changes using jq if available
     if command -v jq &> /dev/null; then
         local create_count update_count delete_count total_changes
-        create_count=$(echo "$plan_output" | jq '[.resource_changes[]? | select(.change.actions[] == "create")] | length')
-        update_count=$(echo "$plan_output" | jq '[.resource_changes[]? | select(.change.actions[] == "update")] | length')
-        delete_count=$(echo "$plan_output" | jq '[.resource_changes[]? | select(.change.actions[] == "delete")] | length')
+        create_count=$(echo "$plan_output" | jq '[.resource_changes[]? | select(.change.actions[] == "create")] | length' 2>/dev/null || echo "0")
+        update_count=$(echo "$plan_output" | jq '[.resource_changes[]? | select(.change.actions[] == "update")] | length' 2>/dev/null || echo "0")
+        delete_count=$(echo "$plan_output" | jq '[.resource_changes[]? | select(.change.actions[] == "delete")] | length' 2>/dev/null || echo "0")
         total_changes=$((create_count + update_count + delete_count))
         
         echo ""
@@ -283,6 +345,9 @@ analyze_plan() {
 #==============================================================================
 # IMPORT FUNCTIONALITY
 #==============================================================================
+# Imports existing Cloudflare resources into Terraform state
+# Processes newline-separated resource_address=cloudflare_id pairs
+# Exits with code 1 if any imports fail
 import_resources() {
     if [[ -z "${INPUT_IMPORT_RESOURCES:-}" ]]; then
         return 0
@@ -296,7 +361,25 @@ import_resources() {
     add_args_from_string tfvars_arr "${TFVARS_ARGS:-}"
     
     while IFS= read -r line; do
-        if [[ -z "$line" ]]; then
+        # Skip empty lines and comments
+        if [[ -z "$line" ]] || [[ "$line" =~ ^[[:space:]]*# ]]; then
+            continue
+        fi
+        
+        # Validate format: must have exactly one equals sign
+        # Count equals signs using bash string manipulation
+        local temp="${line//[^=]}"
+        local equals_count="${#temp}"
+        if [[ "$equals_count" -ne 1 ]]; then
+            log_warning "Skipping malformed import line: $line"
+            log_warning "Expected format: resource_address=cloudflare_id (exactly one '=' character)"
+            continue
+        fi
+        
+        # Ensure both parts are non-empty
+        if [[ ! "$line" =~ ^[^=]+=[^=]+$ ]]; then
+            log_warning "Skipping invalid import line: $line"
+            log_warning "Both resource address and cloudflare ID must be non-empty"
             continue
         fi
         
@@ -323,13 +406,22 @@ import_resources() {
     
     if [[ ${#failed_imports[@]} -gt 0 ]]; then
         log_error "Failed to import ${#failed_imports[@]} resource(s): ${failed_imports[*]}"
+        log_error "Please verify the resource addresses and IDs are correct"
         exit 1
+    fi
+    
+    if [[ ${#imported_resources[@]} -eq 0 ]] && [[ ${#failed_imports[@]} -eq 0 ]]; then
+        log_warning "No valid import statements found"
+        log_info "Use format: resource_address=cloudflare_id (one per line)"
     fi
 }
 
 #==============================================================================
 # CORE TERRAFORM OPERATIONS
 #==============================================================================
+# Initializes Terraform working directory and downloads providers
+# Applies backend configuration if provided
+# Exits with code 1 if initialization fails
 terraform_init() {
     log_step "Initializing Terraform"
     
@@ -339,23 +431,33 @@ terraform_init() {
     
     if ! terraform init "${init_args[@]}"; then
         log_error "Terraform init failed"
+        log_error "This could be due to:"
+        log_error "  - Invalid Terraform configuration"
+        log_error "  - Incorrect backend configuration"
+        log_error "  - Network issues downloading providers"
         exit 1
     fi
     
     log_success "Terraform initialized successfully"
 }
 
+# Validates the Terraform configuration for syntax and consistency
+# Exits with code 1 if validation fails
 terraform_validate() {
     log_step "Validating Terraform Configuration"
     
     if ! terraform validate; then
         log_error "Terraform validation failed"
+        log_error "Please review the configuration for syntax errors or invalid references"
         exit 1
     fi
     
     log_success "Terraform configuration is valid"
 }
 
+# Creates a Terraform execution plan showing proposed changes
+# Outputs plan to a file for potential later use with apply
+# Exits with code 1 if plan creation fails
 terraform_plan() {
     log_step "Creating Terraform Plan"
     
@@ -364,7 +466,16 @@ terraform_plan() {
     add_args_from_string plan_args "${TFVARS_ARGS:-}"
     
     if [[ -n "${INPUT_MAX_PARALLELISM:-}" ]]; then
-        plan_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
+        if [[ "${INPUT_MAX_PARALLELISM}" =~ ^[0-9]+$ ]]; then
+            # Limit parallelism to reasonable range (1-50)
+            if [[ "${INPUT_MAX_PARALLELISM}" -ge 1 ]] && [[ "${INPUT_MAX_PARALLELISM}" -le 50 ]]; then
+                plan_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
+            else
+                log_warning "max_parallelism must be between 1 and 50, using default"
+            fi
+        else
+            log_warning "max_parallelism must be a number, ignoring invalid value"
+        fi
     fi
     
     local plan_output
@@ -450,6 +561,9 @@ terraform_apply() {
     log_success "Terraform apply completed successfully"
 }
 
+# Destroys all Terraform-managed infrastructure
+# Requires both auto_approve=true and destroy_protection=false
+# Exits with code 1 if destruction fails
 terraform_destroy() {
     log_step "Destroying Terraform Resources"
     
@@ -460,15 +574,26 @@ terraform_destroy() {
     
     if [[ "${INPUT_AUTO_APPROVE:-false}" == "true" ]]; then
         destroy_args+=("-auto-approve")
+        log_warning "Auto-approve enabled for DESTRUCTIVE operation"
     else
         log_error "Destroy requires auto_approve=true"
+        log_error "This is a safety mechanism to prevent accidental destruction"
         exit 1
     fi
     
     add_args_from_string destroy_args "${TFVARS_ARGS:-}"
     
     if [[ -n "${INPUT_MAX_PARALLELISM:-}" ]]; then
-        destroy_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
+        if [[ "${INPUT_MAX_PARALLELISM}" =~ ^[0-9]+$ ]]; then
+            # Limit parallelism to reasonable range (1-50)
+            if [[ "${INPUT_MAX_PARALLELISM}" -ge 1 ]] && [[ "${INPUT_MAX_PARALLELISM}" -le 50 ]]; then
+                destroy_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
+            else
+                log_warning "max_parallelism must be between 1 and 50, using default"
+            fi
+        else
+            log_warning "max_parallelism must be a number, ignoring invalid value"
+        fi
     fi
     
     local destroy_output
@@ -482,6 +607,8 @@ terraform_destroy() {
     log_success "Terraform destroy completed successfully"
 }
 
+# Retrieves all Terraform output values from the state
+# Returns empty JSON object if no outputs exist or if state is not initialized
 terraform_output() {
     log_step "Getting Terraform Outputs"
     
@@ -497,6 +624,10 @@ terraform_output() {
 #==============================================================================
 # MAIN EXECUTION
 #==============================================================================
+# Main entry point for the Terraform Cloudflare Action
+# Coordinates validation, initialization, and execution of the requested Terraform action
+# Args:
+#   $@: Command-line arguments (currently unused, reserved for future use)
 main() {
     log_step "Terraform Cloudflare Action - Starting"
     
@@ -537,7 +668,7 @@ main() {
                 log_info "Use 'import_resources' input with format: resource_address=cloudflare_id"
                 exit 1
             fi
-            # Already handled above
+            # Already handled above, now generate plan to verify imports
             terraform_plan
             ;;
         "validate")

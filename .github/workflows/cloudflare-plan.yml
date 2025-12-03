@@ -8,6 +8,11 @@ on:
       - 'terraform/**'
       - '.github/workflows/cloudflare-plan.yml'
 
+# Prevent concurrent execution to avoid state conflicts
+concurrency:
+  group: terraform-plan-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: write
@@ -27,7 +32,7 @@ jobs:
 
       - name: Terraform Cloudflare Plan
         id: plan
-        uses: Action-Foundry/tf-cf-action@v1.0.0
+        uses: Action-Foundry/tf-cf-action@main  # Use @main or specific version tag
         with:
           cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
