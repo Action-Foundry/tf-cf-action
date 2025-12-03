@@ -11,8 +11,8 @@ variable "cloudflare_api_token" {
   sensitive   = true
   
   validation {
-    condition     = can(regex("^[A-Za-z0-9_-]+$", var.cloudflare_api_token))
-    error_message = "The API token must contain only alphanumeric characters, hyphens, and underscores."
+    condition     = length(var.cloudflare_api_token) > 0
+    error_message = "The API token must not be empty."
   }
 }
 
@@ -22,8 +22,8 @@ variable "cloudflare_account_id" {
   sensitive   = true
   
   validation {
-    condition     = can(regex("^[a-f0-9]{32}$", var.cloudflare_account_id))
-    error_message = "The account ID must be a 32-character hexadecimal string."
+    condition     = length(var.cloudflare_account_id) > 0
+    error_message = "The account ID must not be empty."
   }
 }
 

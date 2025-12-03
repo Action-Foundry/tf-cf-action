@@ -360,10 +360,10 @@ import_resources() {
             continue
         fi
         
-        # Validate format
-        if [[ ! "$line" =~ ^[^=]+=[^=]+$ ]]; then
+        # Validate format: must have exactly one equals sign
+        if [[ ! "$line" =~ ^[^=]+=.+$ ]] || [[ "$line" =~ ^[^=]+=[^=]+=.+$ ]]; then
             log_warning "Skipping malformed import line: $line"
-            log_warning "Expected format: resource_address=cloudflare_id"
+            log_warning "Expected format: resource_address=cloudflare_id (exactly one '=' character)"
             continue
         fi
         
@@ -449,8 +449,17 @@ terraform_plan() {
     
     add_args_from_string plan_args "${TFVARS_ARGS:-}"
     
-    if [[ -n "${INPUT_MAX_PARALLELISM:-}" ]] && [[ "${INPUT_MAX_PARALLELISM}" =~ ^[0-9]+$ ]]; then
-        plan_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
+    if [[ -n "${INPUT_MAX_PARALLELISM:-}" ]]; then
+        if [[ "${INPUT_MAX_PARALLELISM}" =~ ^[0-9]+$ ]]; then
+            # Limit parallelism to reasonable range (1-50)
+            if [[ "${INPUT_MAX_PARALLELISM}" -ge 1 ]] && [[ "${INPUT_MAX_PARALLELISM}" -le 50 ]]; then
+                plan_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
+            else
+                log_warning "max_parallelism must be between 1 and 50, using default"
+            fi
+        else
+            log_warning "max_parallelism must be a number, ignoring invalid value"
+        fi
     fi
     
     local plan_output
@@ -558,8 +567,17 @@ terraform_destroy() {
     
     add_args_from_string destroy_args "${TFVARS_ARGS:-}"
     
-    if [[ -n "${INPUT_MAX_PARALLELISM:-}" ]] && [[ "${INPUT_MAX_PARALLELISM}" =~ ^[0-9]+$ ]]; then
-        destroy_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
+    if [[ -n "${INPUT_MAX_PARALLELISM:-}" ]]; then
+        if [[ "${INPUT_MAX_PARALLELISM}" =~ ^[0-9]+$ ]]; then
+            # Limit parallelism to reasonable range (1-50)
+            if [[ "${INPUT_MAX_PARALLELISM}" -ge 1 ]] && [[ "${INPUT_MAX_PARALLELISM}" -le 50 ]]; then
+                destroy_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
+            else
+                log_warning "max_parallelism must be between 1 and 50, using default"
+            fi
+        else
+            log_warning "max_parallelism must be a number, ignoring invalid value"
+        fi
     fi
     
     local destroy_output

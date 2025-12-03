@@ -65,7 +65,7 @@ jobs:
 |-------|-------------|----------|---------|
 | `cloudflare_api_token` | Cloudflare API token | ✅ Yes | - |
 | `cloudflare_account_id` | Cloudflare Account ID | ✅ Yes | - |
-| `terraform_version` | Terraform version to use | No | `1.6.0` |
+| `terraform_version` | Terraform version to use | No | `1.7.0` |
 | `working_directory` | Directory containing Terraform config | No | `.` |
 | `terraform_action` | Action to perform: `plan`, `apply`, `destroy`, `import`, `validate` | No | `plan` |
 | `auto_approve` | Skip approval for apply/destroy | No | `false` |
@@ -321,7 +321,17 @@ Pre-built workflow templates are available in the [`.github/workflows`](.github/
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our contributing guidelines and submit pull requests.
+Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) guidelines before submitting pull requests.
+
+### Development
+
+- Run ShellCheck on bash scripts: `shellcheck scripts/entrypoint.sh`
+- Format Terraform files: `terraform fmt -recursive terraform/`
+- Follow the [.editorconfig](.editorconfig) settings
+
+## 🔒 Security
+
+For security best practices and reporting vulnerabilities, please see [SECURITY.md](SECURITY.md).
 
 ## 📄 License
 
