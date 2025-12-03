@@ -269,7 +269,7 @@ dns_records = {
     zone_id = "your-zone-id"
     name    = "www"
     type    = "CNAME"
-    value   = "example.com"
+    content = "example.com"
     proxied = true
   }
 }

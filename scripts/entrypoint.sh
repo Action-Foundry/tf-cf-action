@@ -44,6 +44,27 @@ log_step() {
 }
 
 #==============================================================================
+# HELPER FUNCTIONS (DRY Principle)
+#==============================================================================
+
+# Safely write to GITHUB_OUTPUT if available (for local testing support)
+write_github_output() {
+    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+        echo "$1" >> "$GITHUB_OUTPUT"
+    fi
+}
+
+# Add arguments from string to array safely (avoids shellcheck SC2206)
+add_args_from_string() {
+    local -n arr=$1
+    local str=$2
+    if [[ -n "$str" ]]; then
+        IFS=' ' read -ra args_array <<< "$str"
+        arr+=("${args_array[@]}")
+    fi
+}
+
+#==============================================================================
 # VALIDATION FUNCTIONS
 #==============================================================================
 validate_required_inputs() {
@@ -189,10 +210,7 @@ detect_drift() {
     
     local plan_args=("-input=false" "-refresh-only" "-detailed-exitcode")
     
-    if [[ -n "${TFVARS_ARGS:-}" ]]; then
-        # shellcheck disable=SC2206
-        plan_args+=($TFVARS_ARGS)
-    fi
+    add_args_from_string plan_args "${TFVARS_ARGS:-}"
     
     local drift_exit_code=0
     terraform plan "${plan_args[@]}" 2>&1 || drift_exit_code=$?
@@ -249,10 +267,8 @@ analyze_plan() {
             has_changes="true"
         fi
         
-        {
-            echo "plan_has_changes=$has_changes"
-            echo "plan_summary=Create: $create_count, Update: $update_count, Delete: $delete_count"
-        } >> "$GITHUB_OUTPUT"
+        write_github_output "plan_has_changes=$has_changes"
+        write_github_output "plan_summary=Create: $create_count, Update: $update_count, Delete: $delete_count"
         
         # Warn about destructive changes
         if [[ "$delete_count" -gt 0 ]]; then
@@ -276,6 +292,8 @@ import_resources() {
     
     local imported_resources=()
     local failed_imports=()
+    local tfvars_arr=()
+    add_args_from_string tfvars_arr "${TFVARS_ARGS:-}"
     
     while IFS= read -r line; do
         if [[ -z "$line" ]]; then
@@ -288,7 +306,7 @@ import_resources() {
         
         log_info "Importing: $resource_address from $cloudflare_id"
         
-        if terraform import ${TFVARS_ARGS:-} "$resource_address" "$cloudflare_id" 2>&1; then
+        if terraform import "${tfvars_arr[@]}" "$resource_address" "$cloudflare_id" 2>&1; then
             imported_resources+=("$resource_address")
             log_success "Successfully imported: $resource_address"
         else
@@ -300,7 +318,7 @@ import_resources() {
     # Report results
     if [[ ${#imported_resources[@]} -gt 0 ]]; then
         log_success "Successfully imported ${#imported_resources[@]} resource(s)"
-        echo "imported_resources=${imported_resources[*]}" >> "$GITHUB_OUTPUT"
+        write_github_output "imported_resources=${imported_resources[*]}"
     fi
     
     if [[ ${#failed_imports[@]} -gt 0 ]]; then
@@ -317,10 +335,7 @@ terraform_init() {
     
     local init_args=("-input=false")
     
-    if [[ -n "${BACKEND_CONFIG_ARGS:-}" ]]; then
-        # shellcheck disable=SC2206
-        init_args+=($BACKEND_CONFIG_ARGS)
-    fi
+    add_args_from_string init_args "${BACKEND_CONFIG_ARGS:-}"
     
     if ! terraform init "${init_args[@]}"; then
         log_error "Terraform init failed"
@@ -346,10 +361,7 @@ terraform_plan() {
     
     local plan_args=("-input=false" "-out=${PLAN_FILE}")
     
-    if [[ -n "${TFVARS_ARGS:-}" ]]; then
-        # shellcheck disable=SC2206
-        plan_args+=($TFVARS_ARGS)
-    fi
+    add_args_from_string plan_args "${TFVARS_ARGS:-}"
     
     if [[ -n "${INPUT_MAX_PARALLELISM:-}" ]]; then
         plan_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
@@ -365,11 +377,13 @@ terraform_plan() {
     echo "$plan_output"
     
     # Capture plan output for GitHub Actions
-    {
-        echo 'plan_output<<EOF'
-        echo "$plan_output"
-        echo 'EOF'
-    } >> "$GITHUB_OUTPUT"
+    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+        {
+            echo 'plan_output<<EOF'
+            echo "$plan_output"
+            echo 'EOF'
+        } >> "$GITHUB_OUTPUT"
+    fi
     
     # Analyze the plan
     analyze_plan "${PLAN_FILE}"
@@ -392,7 +406,7 @@ terraform_apply() {
         log_warning "Set 'auto_approve: true' to apply changes automatically."
         log_warning "This is a safety mechanism to prevent accidental changes."
         log_warning "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        log_info "Running plan only..."
+        log_info "Auto-approve is disabled. Skipping apply step and running plan only for review. No changes will be applied."
         terraform_plan
         return 0
     fi
@@ -420,16 +434,18 @@ terraform_apply() {
     echo "$apply_output"
     
     # Capture apply output
-    {
-        echo 'apply_output<<EOF'
-        echo "$apply_output"
-        echo 'EOF'
-    } >> "$GITHUB_OUTPUT"
+    if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+        {
+            echo 'apply_output<<EOF'
+            echo "$apply_output"
+            echo 'EOF'
+        } >> "$GITHUB_OUTPUT"
+    fi
     
     # Capture state outputs
     local state_outputs
     state_outputs=$(terraform output -json 2>/dev/null || echo "{}")
-    echo "state_outputs=$state_outputs" >> "$GITHUB_OUTPUT"
+    write_github_output "state_outputs=$state_outputs"
     
     log_success "Terraform apply completed successfully"
 }
@@ -437,7 +453,7 @@ terraform_apply() {
 terraform_destroy() {
     log_step "Destroying Terraform Resources"
     
-    # Safety check
+    # Safety check for destroy protection
     check_destroy_protection
     
     local destroy_args=("-input=false")
@@ -449,10 +465,7 @@ terraform_destroy() {
         exit 1
     fi
     
-    if [[ -n "${TFVARS_ARGS:-}" ]]; then
-        # shellcheck disable=SC2206
-        destroy_args+=($TFVARS_ARGS)
-    fi
+    add_args_from_string destroy_args "${TFVARS_ARGS:-}"
     
     if [[ -n "${INPUT_MAX_PARALLELISM:-}" ]]; then
         destroy_args+=("-parallelism=${INPUT_MAX_PARALLELISM}")
@@ -476,7 +489,7 @@ terraform_output() {
     state_outputs=$(terraform output -json 2>/dev/null || echo "{}")
     
     echo "$state_outputs"
-    echo "state_outputs=$state_outputs" >> "$GITHUB_OUTPUT"
+    write_github_output "state_outputs=$state_outputs"
     
     log_success "Terraform outputs retrieved"
 }

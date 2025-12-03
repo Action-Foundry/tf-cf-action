@@ -23,6 +23,3 @@ provider "cloudflare" {
   # - Page Rules:Edit (for page rules)
   # - Firewall:Edit (for WAF/Firewall rules)
 }
-
-# Data source to validate API token
-data "cloudflare_api_token_permission_groups" "all" {}

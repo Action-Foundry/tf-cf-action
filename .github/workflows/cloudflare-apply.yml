@@ -44,13 +44,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Terraform Cloudflare Apply
-        uses: Action-Foundry/tf-cf-action@main
+        uses: Action-Foundry/tf-cf-action@v1.0.0
         with:
           cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           working_directory: './terraform'
           terraform_action: ${{ github.event.inputs.terraform_action || 'apply' }}
-          auto_approve: ${{ github.event.inputs.auto_approve || 'true' }}
+          auto_approve: ${{ github.event.inputs.auto_approve || 'false' }}
           tfvars_file: 'terraform.tfvars'
           enable_drift_detection: 'true'
           destroy_protection: 'true'

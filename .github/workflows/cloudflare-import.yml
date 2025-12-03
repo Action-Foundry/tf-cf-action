@@ -44,7 +44,7 @@ jobs:
 
       - name: Import Resources
         if: github.event.inputs.dry_run == 'false'
-        uses: Action-Foundry/tf-cf-action@main
+        uses: Action-Foundry/tf-cf-action@v1.0.0
         with:
           cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -55,7 +55,7 @@ jobs:
 
       - name: Dry Run - Plan Only
         if: github.event.inputs.dry_run == 'true'
-        uses: Action-Foundry/tf-cf-action@main
+        uses: Action-Foundry/tf-cf-action@v1.0.0
         with:
           cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

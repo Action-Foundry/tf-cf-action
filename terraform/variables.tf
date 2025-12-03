@@ -43,7 +43,7 @@ variable "dns_records" {
     zone_id  = string
     name     = string
     type     = string
-    value    = optional(string, null)
+    content  = optional(string, null)
     data     = optional(map(string), null)
     priority = optional(number, null)
     proxied  = optional(bool, false)
@@ -111,7 +111,7 @@ variable "access_applications" {
 #==============================================================================
 
 variable "workers" {
-  description = "Map of Cloudflare Workers to deploy"
+  description = "Map of Cloudflare Workers to deploy. WARNING: secret_text_bindings will store secrets in Terraform state. Consider using wrangler secret put instead."
   type = map(object({
     name    = string
     content = string

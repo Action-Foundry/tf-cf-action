@@ -26,7 +26,7 @@ resource "cloudflare_record" "dns_records" {
   zone_id  = each.value.zone_id
   name     = each.value.name
   type     = each.value.type
-  content  = each.value.value
+  content  = each.value.content
   priority = each.value.priority
   proxied  = each.value.proxied
   ttl      = each.value.ttl
@@ -36,9 +36,6 @@ resource "cloudflare_record" "dns_records" {
   dynamic "data" {
     for_each = each.value.data != null ? [each.value.data] : []
     content {
-      # MX record data
-      priority = lookup(data.value, "priority", null)
-
       # SRV record data
       service = lookup(data.value, "service", null)
       proto   = lookup(data.value, "proto", null)
@@ -178,6 +175,9 @@ resource "cloudflare_workers_script" "workers" {
     }
   }
 
+  # WARNING: Do not set secrets via Terraform to avoid writing them to state.
+  # Use `wrangler secret put` or the Cloudflare dashboard/API to set secrets for Workers.
+  # See: https://developers.cloudflare.com/workers/configuration/secrets/
   dynamic "secret_text_binding" {
     for_each = each.value.secret_text_bindings
     content {

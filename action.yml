@@ -15,7 +15,7 @@ inputs:
   terraform_version:
     description: 'Terraform version to use'
     required: false
-    default: '1.9.0'
+    default: '1.6.0'
   working_directory:
     description: 'Working directory containing Terraform configuration'
     required: false
@@ -89,8 +89,6 @@ runs:
       env:
         CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare_api_token }}
         CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id }}
-        TF_VAR_cloudflare_api_token: ${{ inputs.cloudflare_api_token }}
-        TF_VAR_cloudflare_account_id: ${{ inputs.cloudflare_account_id }}
         INPUT_WORKING_DIRECTORY: ${{ inputs.working_directory }}
         INPUT_TERRAFORM_ACTION: ${{ inputs.terraform_action }}
         INPUT_AUTO_APPROVE: ${{ inputs.auto_approve }}

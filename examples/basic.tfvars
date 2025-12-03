@@ -17,7 +17,7 @@ dns_records = {
     zone_id = "YOUR_ZONE_ID"  # Replace after zone creation
     name    = "@"
     type    = "A"
-    value   = "192.0.2.1"
+    content = "192.0.2.1"
     proxied = true
     ttl     = 1  # Auto TTL when proxied
   }
@@ -25,7 +25,7 @@ dns_records = {
     zone_id = "YOUR_ZONE_ID"
     name    = "www"
     type    = "CNAME"
-    value   = "example.com"
+    content = "example.com"
     proxied = true
     ttl     = 1
   }
@@ -33,7 +33,7 @@ dns_records = {
     zone_id  = "YOUR_ZONE_ID"
     name     = "@"
     type     = "MX"
-    value    = "mail.example.com"
+    content  = "mail.example.com"
     priority = 10
     proxied  = false
     ttl      = 3600
@@ -42,7 +42,7 @@ dns_records = {
     zone_id = "YOUR_ZONE_ID"
     name    = "@"
     type    = "TXT"
-    value   = "v=spf1 include:_spf.example.com ~all"
+    content = "v=spf1 include:_spf.example.com ~all"
     proxied = false
     ttl     = 3600
   }
