@@ -34,9 +34,11 @@ resource "cloudflare_record" "dns_records" {
   content  = each.value.content
   priority = each.value.priority
   proxied  = each.value.proxied
-  ttl      = each.value.proxied ? 1 : each.value.ttl  # Auto TTL when proxied
-  comment  = each.value.comment
-  tags     = each.value.tags
+  # Cloudflare automatically manages TTL for proxied records, so we set it to 1 (automatic)
+  # For non-proxied records, use the specified TTL value
+  ttl     = each.value.proxied ? 1 : each.value.ttl
+  comment = each.value.comment
+  tags    = each.value.tags
 
   # Dynamic block for SRV, CAA, and other records requiring structured data
   dynamic "data" {

@@ -206,9 +206,10 @@ setup_backend_config() {
         # Skip empty lines and comments
         if [[ -n "$line" ]] && [[ ! "$line" =~ ^[[:space:]]*# ]]; then
             backend_args+=("-backend-config=$line")
-            # Mask potential sensitive values in logs
+            # Mask potential sensitive values in logs (case-insensitive matching)
             local display_line="$line"
-            if [[ "$line" =~ (password|secret|token|key)= ]]; then
+            local line_lower="${line,,}"  # Convert to lowercase for comparison
+            if [[ "$line_lower" =~ (password|secret|token|key|credentials)= ]]; then
                 display_line="${line%%=*}=***"
             fi
             log_info "Backend config: $display_line"
@@ -361,9 +362,19 @@ import_resources() {
         fi
         
         # Validate format: must have exactly one equals sign
-        if [[ ! "$line" =~ ^[^=]+=.+$ ]] || [[ "$line" =~ ^[^=]+=[^=]+=.+$ ]]; then
+        # Check for absence of equals sign or multiple equals signs
+        local equals_count
+        equals_count=$(grep -o "=" <<< "$line" | wc -l)
+        if [[ "$equals_count" -ne 1 ]]; then
             log_warning "Skipping malformed import line: $line"
             log_warning "Expected format: resource_address=cloudflare_id (exactly one '=' character)"
+            continue
+        fi
+        
+        # Ensure both parts are non-empty
+        if [[ ! "$line" =~ ^[^=]+=[^=]+$ ]]; then
+            log_warning "Skipping invalid import line: $line"
+            log_warning "Both resource address and cloudflare ID must be non-empty"
             continue
         fi
         
